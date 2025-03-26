@@ -1,7 +1,7 @@
 import os
 import random
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from cryptography import x509
@@ -9,11 +9,11 @@ from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes
 from datetime import datetime, timedelta, UTC
 
-class KeyCertGenerator:
+class KeyCertManager:
     def __init__(self, root):
         self.root = root
-        self.root.title("Key & Certificate Generator")
-        self.root.geometry("500x500")
+        self.root.title("Key & Certificate Manager")
+        self.root.geometry("500x700")
         
         self.fields = {
             "Name": "John Doe",
@@ -21,7 +21,12 @@ class KeyCertGenerator:
             "Country Code": "US",
             "State": "California",
             "City": "San Francisco",
-            "Common Name (e.g., domain.com)": "example.com"
+            "Common Name (e.g., domain.com)": "example.com",
+            "Alias": "mykey",
+            "Key Algorithm": "RSA",
+            "Key Size": "2048",
+            "Keystore Name": "mykeystore.jks",
+            "Validity (days)": "365"
         }
         
         self.entries = {}
@@ -35,7 +40,16 @@ class KeyCertGenerator:
             self.entries[label] = entry
         
         self.generate_button = tk.Button(root, text="Generate Keys & Certificate", command=self.start_entropy)
-        self.generate_button.pack(pady=20)
+        self.generate_button.pack(pady=10)
+        
+        self.export_button = tk.Button(root, text="Export Certificate", command=self.export_certificate)
+        self.export_button.pack(pady=10)
+        
+        self.import_button = tk.Button(root, text="Import Certificate", command=self.import_certificate)
+        self.import_button.pack(pady=10)
+        
+        self.delete_button = tk.Button(root, text="Delete Keys & Certificate", command=self.delete_keys)
+        self.delete_button.pack(pady=10)
     
     def start_entropy(self):
         self.user_data = {label: entry.get() for label, entry in self.entries.items()}
@@ -65,7 +79,7 @@ class KeyCertGenerator:
     
     def generate_keys(self):
         random.seed(sum(x + y for x, y in self.entropy))
-        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=int(self.user_data["Key Size"]))
         public_key = private_key.public_key()
         
         with open("private_key.pem", "wb") as f:
@@ -99,7 +113,7 @@ class KeyCertGenerator:
             .public_key(private_key.public_key())
             .serial_number(x509.random_serial_number())
             .not_valid_before(datetime.now(UTC))
-            .not_valid_after(datetime.now(UTC) + timedelta(days=365))
+            .not_valid_after(datetime.now(UTC) + timedelta(days=int(self.user_data["Validity (days)"])))
             .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
             .sign(private_key, hashes.SHA256())
         )
@@ -107,9 +121,30 @@ class KeyCertGenerator:
         with open("certificate.pem", "wb") as f:
             f.write(certificate.public_bytes(serialization.Encoding.PEM))
         
-        messagebox.showinfo("Success", "Key pair and self-signed certificate generated successfully!")
-        
+        messagebox.showinfo("Success", f"Key pair and certificate generated successfully!\n\n-alias {self.user_data['Alias']}: Name of the key\n\n-keyalg {self.user_data['Key Algorithm']}: Algorithm used\n\n-keysize {self.user_data['Key Size']}: Key size\n\n-keystore {self.user_data['Keystore Name']}: Name of the keystore\n\n-validity {self.user_data['Validity (days)']}: Valid for {self.user_data['Validity (days)']} days")
+    
+    def export_certificate(self):
+        filepath = filedialog.asksaveasfilename(defaultextension=".pem", filetypes=[("PEM files", "*.pem"), ("All files", "*.*")])
+        if filepath:
+            with open("certificate.pem", "rb") as src, open(filepath, "wb") as dest:
+                dest.write(src.read())
+            messagebox.showinfo("Export", "Certificate exported successfully!")
+    
+    def import_certificate(self):
+        filepath = filedialog.askopenfilename(filetypes=[("PEM files", "*.pem"), ("All files", "*.*")])
+        if filepath:
+            with open(filepath, "rb") as src, open("imported_certificate.pem", "wb") as dest:
+                dest.write(src.read())
+            messagebox.showinfo("Import", "Certificate imported successfully!")
+    
+    def delete_keys(self):
+        if messagebox.askyesno("Delete", "Are you sure you want to delete the generated keys and certificate?"):
+            for file in ["private_key.pem", "public_key.pem", "certificate.pem", "imported_certificate.pem"]:
+                if os.path.exists(file):
+                    os.remove(file)
+            messagebox.showinfo("Delete", "Keys and certificates deleted successfully!")
+
 if __name__ == "__main__":
     root = tk.Tk()
-    app = KeyCertGenerator(root)
+    app = KeyCertManager(root)
     root.mainloop()
